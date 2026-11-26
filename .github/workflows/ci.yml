@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [develop]
+    branches: [develop, main]
   pull_request:
     branches: [main]
 
@@ -42,3 +42,53 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           severity: HIGH,CRITICAL
+
+      - name: Save validated Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker save inventory-app:ci -o inventory-image.tar
+
+      - name: Upload validated Docker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: validated-image
+          path: inventory-image.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: dockerhub-publish
+
+    steps:
+      - name: Check out validated source
+        uses: actions/checkout@v4
+
+      - name: Read application version
+        id: version
+        run: |
+          VERSION=$(cat VERSION)
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: bniyibizi
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Download validated Docker image
+        uses: actions/download-artifact@v4
+        with:
+          name: validated-image
+
+      - name: Load validated Docker image
+        run: docker load -i inventory-image.tar
+
+      - name: Publish validated release image
+        run: |
+          IMAGE="bniyibizi/inventory-app:${{ steps.version.outputs.tag }}"
+          docker tag inventory-app:ci "$IMAGE"
+          docker push "$IMAGE"
