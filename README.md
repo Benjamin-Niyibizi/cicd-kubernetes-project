@@ -33,3 +33,16 @@ python -m flask --app app.main run --host 127.0.0.1 --port 5000
 python -m pytest -v
 ruff check app tests
 ```
+## Example request
+
+The application health status is checked with:
+
+```bash
+curl http://127.0.0.1:5000/health
+```
+
+Expected response:
+
+```json
+{"status":"ok"}
+```
